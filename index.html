@@ -68,9 +68,15 @@
   .remove:hover { color: var(--red); border-color: var(--red); background: rgba(248, 113, 113, 0.08); }
   .remove:disabled { opacity: 0.3; cursor: not-allowed; }
   .remove:disabled:hover { color: var(--muted); border-color: transparent; background: transparent; }
-  #entry-slot { margin-bottom: 12px; }
   #entry-lines { margin-bottom: 2px; }
   .toggles-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .slots-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .entry-divider {
+    display: flex; align-items: center; gap: 10px;
+    margin: 12px 0 10px; color: var(--muted);
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600;
+  }
+  .entry-divider::before, .entry-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
   .toggle-row {
     display: flex; align-items: center; gap: 10px;
     background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
@@ -179,6 +185,7 @@
   }
   @media (max-width: 520px) {
     .toggles-grid { grid-template-columns: 1fr; }
+    .slots-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 </style>
 </head>
@@ -206,8 +213,9 @@
     <div class="col">
       <section class="panel" aria-label="Add item">
         <h2>Add an item</h2>
-        <p class="hint">Pick the equip slot, toggle up to 3 passive lines (each gives +1), then add it to your inventory.</p>
-        <select id="entry-slot" aria-label="Equip slot"></select>
+        <p class="hint">Toggle the equip slot, then toggle up to 3 passive lines (each gives +1), then add it to your inventory.</p>
+        <div id="entry-slots" class="toggles-grid slots-grid" aria-label="Equip slot"></div>
+        <div class="entry-divider"><span>Passive lines &middot; pick up to 3</span></div>
         <div id="entry-lines" class="toggles-grid"></div>
         <div class="form-actions">
           <span class="count" id="toggle-count">0 / 3 lines selected</span>
@@ -252,6 +260,7 @@ const V1_TO_NEW = [0, 1, 2, 3, 4, 5, 6, 12, 7, 8, 11, 10, 9];
 const MEMO_LIMIT = 800000;
 
 const entryLinesEl = document.getElementById('entry-lines');
+const slotTogglesEl = document.getElementById('entry-slots');
 const invListEl = document.getElementById('inv-list');
 const invCountEl = document.getElementById('inv-count');
 const goalGridEl = document.getElementById('goal-grid');
@@ -342,6 +351,7 @@ function toast(msg) {
 /* ----- entry form: slot + up to 3 passive toggle switches ----- */
 
 const MAX_LINES = 3;
+let pickedSlot = '';   // single-select: one equip slot per item
 let pickedLines = [];
 
 function slotBadge(slot) {
@@ -356,15 +366,38 @@ function toggleRowHTML(p, pi) {
     + '<span class="slider"></span></span>'
     + '<span class="pname">' + esc(p) + ' +1</span></label>';
 }
+function slotToggleHTML(slot) {
+  return '<label class="toggle-row"><span class="switch">'
+    + '<input type="checkbox" data-slot="' + esc(slot) + '"'
+    + (pickedSlot === slot ? ' checked' : '')
+    + ' aria-label="' + esc(slot) + ' slot">'
+    + '<span class="slider"></span></span>'
+    + '<span class="pname">' + esc(slot) + '</span></label>';
+}
 function renderEntry() {
+  slotTogglesEl.innerHTML = SLOTS.map(slotToggleHTML).join('');
   entryLinesEl.innerHTML = PASSIVES.map(toggleRowHTML).join('');
   updateToggleMeta();
 }
 function updateToggleMeta() {
   const n = pickedLines.length;
-  document.getElementById('toggle-count').textContent = n + ' / ' + MAX_LINES + ' lines selected';
+  document.getElementById('toggle-count').textContent =
+    (pickedSlot || 'no slot') + ' \u00b7 ' + n + ' / ' + MAX_LINES + ' lines selected';
   document.getElementById('add-item-btn').disabled = n === 0;
 }
+slotTogglesEl.addEventListener('change', function (e) {
+  const input = e.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  if (input.checked) {
+    pickedSlot = input.dataset.slot;
+    slotTogglesEl.querySelectorAll('input[type="checkbox"]').forEach(function (other) {
+      if (other !== input) other.checked = false;
+    });
+  } else if (pickedSlot === input.dataset.slot) {
+    pickedSlot = '';
+  }
+  updateToggleMeta();
+});
 entryLinesEl.addEventListener('change', function (e) {
   const input = e.target.closest('input[type="checkbox"]');
   if (!input) return;
@@ -382,11 +415,10 @@ entryLinesEl.addEventListener('change', function (e) {
   updateToggleMeta();
 });
 document.getElementById('add-item-btn').addEventListener('click', function () {
-  const slot = document.getElementById('entry-slot').value;
-  if (!slot) { toast('Pick an equip slot first'); return; }
+  if (!pickedSlot) { toast('Pick an equip slot first'); return; }
   if (!pickedLines.length) { toast('Toggle at least one passive line'); return; }
-  state.items.push({ id: newId(), slot: slot, lines: pickedLines.slice() });
-  document.getElementById('entry-slot').value = '';
+  state.items.push({ id: newId(), slot: pickedSlot, lines: pickedLines.slice() });
+  pickedSlot = '';
   pickedLines = [];
   renderEntry();
   renderInventory();
@@ -747,9 +779,6 @@ document.getElementById('solve-btn').addEventListener('click', function () {
 
 /* ----- init ----- */
 
-document.getElementById('entry-slot').innerHTML =
-  '<option value="">&mdash; select slot &mdash;</option>'
-  + SLOTS.map(function (s) { return '<option value="' + esc(s) + '">' + esc(s) + '</option>'; }).join('');
 renderEntry();
 renderInventory();
 renderGoal();
