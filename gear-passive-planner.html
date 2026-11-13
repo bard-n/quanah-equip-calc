@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gear Passive Planner</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b26;
+    --panel-2: #10141d;
+    --border: #2a3245;
+    --text: #e6e9f0;
+    --muted: #8b94a7;
+    --accent: #7c9cff;
+    --green: #4ade80;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background:
+      radial-gradient(1000px 500px at 80% -10%, rgba(124, 156, 255, 0.08), transparent 60%),
+      radial-gradient(800px 400px at 10% 110%, rgba(74, 222, 128, 0.05), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header { max-width: 1220px; margin: 0 auto; padding: 28px 20px 6px; }
+  header h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: 0.3px; }
+  header h1 .accent { color: var(--accent); }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  main.layout {
+    max-width: 1220px; margin: 0 auto; padding: 20px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .cols {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px;
+    align-items: start;
+  }
+  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .panel h2 { margin: 0 0 6px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .hint { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  .count { color: var(--muted); font-size: 13px; font-weight: 500; }
+  select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; font-family: inherit;
+  }
+  select:focus { outline: 2px solid rgba(124, 156, 255, 0.5); border-color: var(--accent); }
+  button { font-family: inherit; cursor: pointer; }
+  .btn {
+    padding: 9px 14px; border-radius: 8px; font-size: 14px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #0d1117; font-weight: 700; }
+  .btn-primary:hover { color: #0d1117; border-color: var(--accent); filter: brightness(1.12); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); color: var(--text); }
+  .remove {
+    flex: 0 0 30px; width: 30px; height: 34px; border-radius: 8px;
+    background: transparent; border: 1px solid transparent; color: var(--muted); font-size: 16px; line-height: 1;
+  }
+  .remove:hover { color: var(--red); border-color: var(--red); background: rgba(248, 113, 113, 0.08); }
+  .remove:disabled { opacity: 0.3; cursor: not-allowed; }
+  .remove:disabled:hover { color: var(--muted); border-color: transparent; background: transparent; }
+  #entry-slot { margin-bottom: 12px; }
+  #entry-lines { margin-bottom: 12px; }
+  .lines-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .form-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chip {
+    display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px;
+    background: rgba(124, 156, 255, 0.12); border: 1px solid rgba(124, 156, 255, 0.35); color: #aebbff;
+  }
+  .chip.dim { background: transparent; border-color: var(--border); color: var(--muted); }
+  .slot-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 999px; border: 1px solid;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .slot-badge.dim-badge { color: var(--muted); border-color: var(--border); background: transparent; }
+  .alt {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px;
+  }
+  .alt:last-child { margin-bottom: 0; }
+  .alt-head { display: flex; align-items: baseline; gap: 10px; font-size: 13px; margin-bottom: 8px; }
+  .alt-rank { font-weight: 700; color: var(--accent); }
+  .alt-short { font-weight: 600; color: var(--amber); }
+  .alt-lines { color: var(--muted); font-size: 12px; }
+  .alt-picks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .alt-pick { display: inline-flex; align-items: center; gap: 6px; }
+  .alt-picks .slot-badge, .alt-picks .chip { font-size: 11px; padding: 1px 8px; }
+  .alt-needs { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .alt-needs b { color: var(--amber); font-weight: 600; }
+  .inv-group { margin-bottom: 14px; }
+  .inv-group:last-child { margin-bottom: 0; }
+  .inv-group h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+  .inv-group h3 .muted { text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .inv-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px;
+  }
+  .inv-item .chips { margin: 0; flex: 1; }
+  .inv-item .remove { flex: 0 0 26px; width: 26px; height: 30px; }
+  .muted { color: var(--muted); }
+  .goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 8px; }
+  .goal-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+    cursor: pointer;
+  }
+  .goal-row .goal-label { font-size: 13px; }
+  .goal-row select { flex: 0 0 62px; width: 62px; padding: 6px 4px; }
+  .stale {
+    background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.4); color: var(--amber);
+    border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px;
+  }
+  .warn-block {
+    background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.4); color: var(--red);
+    border-radius: 8px; padding: 10px 12px; font-size: 13.5px;
+  }
+  .result-summary { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .result-summary b { color: var(--green); }
+  .pick {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px;
+  }
+  .pick .chips { margin: 0; flex-basis: 100%; }
+  .pick.empty-pick { opacity: 0.75; }
+  .totals { list-style: none; margin: 8px 0 0; padding: 0; }
+  .totals li {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+    padding: 7px 0; border-bottom: 1px dashed var(--border); font-size: 14px;
+  }
+  .totals li:last-child { border-bottom: none; }
+  .t-val { font-weight: 700; white-space: nowrap; }
+  .t-val.pos { color: var(--green); }
+  .t-val.neg { color: var(--red); }
+  .t-val.amber { color: var(--amber); }
+  .empty { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 8px 0 0; }
+  .subhead { margin: 14px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  footer { max-width: 1220px; margin: 0 auto; padding: 4px 20px 30px; color: var(--muted); font-size: 12.5px; }
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: rgba(10, 14, 20, 0.92); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 16px; border-radius: 10px; font-size: 13.5px; opacity: 0;
+    pointer-events: none; transition: opacity 0.25s;
+  }
+  #toast.show { opacity: 1; }
+  @media (max-width: 1020px) {
+    .cols { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    .lines-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Gear <span class="accent">Passive</span> Planner</h1>
+  <p>Set a goal, add your items with their +1 passive lines, and get the best items to equip &mdash; one per slot.</p>
+</header>
+<main class="layout">
+  <section class="panel" aria-label="Goal">
+    <h2>Goal</h2>
+    <p class="hint">Pick how many +1 lines of each passive you want equipped in total (0&ndash;3).</p>
+    <div id="stale-banner" class="stale" hidden>Results are outdated &mdash; click &ldquo;Find best setup&rdquo; again.</div>
+    <div class="goal-grid" id="goal-grid"></div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-primary" id="solve-btn">Find best setup</button>
+      <button type="button" class="btn" id="reset-goals-btn">Reset goals</button>
+    </div>
+  </section>
+  <section class="panel" aria-label="Best setup">
+    <h2>Best setup</h2>
+    <div id="results-content"></div>
+  </section>
+  <div class="cols">
+    <div class="col">
+      <section class="panel" aria-label="Add item">
+        <h2>Add an item</h2>
+        <p class="hint">Pick the equip slot, choose up to 3 passive lines (each gives +1; use none for unused lines), then add it to your inventory.</p>
+        <select id="entry-slot" aria-label="Equip slot"></select>
+        <div id="entry-lines" class="lines-grid"></div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-primary" id="add-item-btn">Add item</button>
+        </div>
+      </section>
+    </div>
+    <div class="col">
+      <section class="panel" aria-label="Inventory">
+        <h2>Inventory <span class="count" id="inv-count"></span></h2>
+        <div id="inv-list"></div>
+        <div class="form-actions">
+          <button type="button" class="btn" id="clear-items-btn">Clear all items</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+<footer>Changes are saved automatically in this browser. Static page &mdash; works offline. To match your game, edit the SLOTS and PASSIVES lists at the top of the script.</footer>
+<div id="toast" role="status"></div>
+<script>
+'use strict';
+
+/* ===== CONFIG — edit these lists to match your game ===== */
+const SLOTS = ['Hat', 'Top', 'Bottom', 'Shoes', 'Gloves', 'Cape'];
+const PASSIVES = [
+  'Warrior Skill', 'Bowman Skill', 'Thief Skill', 'Mage Skill', 'Pirate Skill',
+  'White Hole', 'Leap', 'Ignore DEF', 'ATK/MATK', 'Crit DMG', 'Damage', 'Boss Damage',
+  'Registry'
+];
+const SLOT_COLORS = {
+  Hat: '#7c9cff', Top: '#4ade80', Bottom: '#fbbf24',
+  Shoes: '#f472b6', Gloves: '#22d3ee', Cape: '#c084fc'
+};
+/* ======================================================== */
+
+const STORAGE_KEY = 'gear-passive-planner-v1';
+const MEMO_LIMIT = 800000;
+
+const entryLinesEl = document.getElementById('entry-lines');
+const invListEl = document.getElementById('inv-list');
+const invCountEl = document.getElementById('inv-count');
+const goalGridEl = document.getElementById('goal-grid');
+const resultsEl = document.getElementById('results-content');
+const staleEl = document.getElementById('stale-banner');
+const clearBtn = document.getElementById('clear-items-btn');
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function newId() {
+  return 'it-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+}
+function emptyState() { return { items: [], goal: PASSIVES.map(function () { return 0; }) }; }
+function normalizeState(s) {
+  const st = emptyState();
+  if (s && Array.isArray(s.items)) {
+    st.items = s.items.filter(function (it) { return it && typeof it === 'object'; }).map(function (it) {
+      return {
+        id: (typeof it.id === 'string' && it.id) ? it.id : newId(),
+        slot: SLOTS.indexOf(it.slot) >= 0 ? it.slot : SLOTS[0],
+        lines: Array.isArray(it.lines)
+          ? it.lines.filter(function (l) { return Number.isInteger(l) && l >= 0 && l < PASSIVES.length; })
+          : []
+      };
+    });
+  }
+  if (s && Array.isArray(s.goal)) {
+    st.goal = PASSIVES.map(function (_, i) {
+      const v = Math.floor(Number(s.goal[i]));
+      return (Number.isFinite(v) && v > 0) ? Math.min(v, 3) : 0;
+    });
+  }
+  return st;
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return normalizeState(JSON.parse(raw));
+  } catch (e) { /* corrupted or unavailable storage — fall through to defaults */ }
+  return emptyState();
+}
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
+}
+
+let state = loadState();
+let solveSnapshot = null;
+
+function stateSig() { return JSON.stringify({ i: state.items, g: state.goal }); }
+function markStale() {
+  if (solveSnapshot !== null && stateSig() !== solveSnapshot) staleEl.hidden = false;
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { el.classList.remove('show'); }, 1800);
+}
+
+/* ----- entry form ----- */
+
+let entryLines = ['', '', ''];
+
+function slotBadge(slot) {
+  const c = SLOT_COLORS[slot] || '#8b94a7';
+  return '<span class="slot-badge" style="color:' + c + ';border-color:' + c + '66;background:' + c + '1f">' + esc(slot) + '</span>';
+}
+function lineSelectHTML(val, i) {
+  return '<select class="line-select" data-line="' + i + '" aria-label="Passive line ' + (i + 1) + '">'
+    + '<option value=""' + (val === '' ? ' selected' : '') + '>&mdash; none &mdash;</option>'
+    + PASSIVES.map(function (p, pi) {
+        return '<option value="' + pi + '"' + (pi === val ? ' selected' : '') + '>' + esc(p) + ' +1</option>';
+      }).join('')
+    + '</select>';
+}
+function renderEntry() {
+  entryLinesEl.innerHTML = entryLines.map(lineSelectHTML).join('');
+}
+entryLinesEl.addEventListener('change', function (e) {
+  if (e.target.classList.contains('line-select')) {
+    entryLines[+e.target.dataset.line] = e.target.value === '' ? '' : +e.target.value;
+  }
+});
+document.getElementById('add-item-btn').addEventListener('click', function () {
+  const slot = document.getElementById('entry-slot').value;
+  if (!slot) { toast('Pick an equip slot first'); return; }
+  const lines = entryLines.filter(function (v) { return v !== ''; }).map(Number);
+  if (!lines.length) { toast('Pick at least one passive line'); return; }
+  state.items.push({ id: newId(), slot: slot, lines: lines });
+  document.getElementById('entry-slot').value = '';
+  entryLines = ['', '', ''];
+  renderEntry();
+  renderInventory();
+  saveState();
+  markStale();
+  toast('Item added to inventory');
+});
+
+/* ----- inventory ----- */
+
+function itemRowHTML(it) {
+  return '<div class="inv-item">'
+    + '<div class="chips">' + (it.lines.length
+        ? it.lines.map(function (l) { return '<span class="chip">' + esc(PASSIVES[l]) + ' +1</span>'; }).join('')
+        : '<span class="chip dim">no lines</span>')
+    + '</div>'
+    + '<button type="button" class="remove" data-action="delete-item" data-id="' + esc(it.id) + '" title="Delete item" aria-label="Delete ' + esc(it.slot) + ' item">&times;</button>'
+    + '</div>';
+}
+function renderInventory() {
+  invCountEl.textContent = state.items.length ? '(' + state.items.length + ' item' + (state.items.length > 1 ? 's' : '') + ')' : '';
+  clearBtn.disabled = !state.items.length;
+  if (!state.items.length) {
+    invListEl.innerHTML = '<p class="empty">No items yet &mdash; add your first item above.</p>';
+    return;
+  }
+  invListEl.innerHTML = SLOTS.map(function (slot) {
+    const arr = state.items.filter(function (it) { return it.slot === slot; });
+    if (!arr.length) return '';
+    return '<div class="inv-group"><h3 style="color:' + (SLOT_COLORS[slot] || 'inherit') + '">' + esc(slot)
+      + ' <span class="muted">(' + arr.length + ')</span></h3>'
+      + arr.map(itemRowHTML).join('') + '</div>';
+  }).join('');
+}
+invListEl.addEventListener('click', function (e) {
+  const btn = e.target.closest('button[data-action="delete-item"]');
+  if (!btn) return;
+  const idx = state.items.findIndex(function (it) { return it.id === btn.dataset.id; });
+  if (idx < 0) return;
+  const slot = state.items[idx].slot;
+  state.items.splice(idx, 1);
+  renderInventory();
+  saveState();
+  markStale();
+  toast('Deleted ' + slot.toLowerCase() + ' item');
+});
+clearBtn.addEventListener('click', function () {
+  if (!state.items.length) return;
+  if (confirm('Delete all ' + state.items.length + ' items?')) {
+    state.items = [];
+    renderInventory();
+    saveState();
+    markStale();
+    toast('Inventory cleared');
+  }
+});
+
+/* ----- goal ----- */
+
+function renderGoal() {
+  goalGridEl.innerHTML = PASSIVES.map(function (p, i) {
+    return '<label class="goal-row"><span class="goal-label">' + esc(p) + '</span>'
+      + '<select data-goal="' + i + '" aria-label="Goal for ' + esc(p) + '">'
+      + [0, 1, 2, 3].map(function (n) {
+          return '<option value="' + n + '"' + (state.goal[i] === n ? ' selected' : '') + '>' + n + '</option>';
+        }).join('')
+      + '</select></label>';
+  }).join('');
+}
+goalGridEl.addEventListener('change', function (e) {
+  const i = +e.target.dataset.goal;
+  if (Number.isNaN(i)) return;
+  state.goal[i] = +e.target.value;
+  saveState();
+  markStale();
+});
+document.getElementById('reset-goals-btn').addEventListener('click', function () {
+  state.goal = PASSIVES.map(function () { return 0; });
+  renderGoal();
+  saveState();
+  markStale();
+  toast('Goals reset');
+});
+
+/* ----- k-best: setups closest to the goal, for goals that can't be fully met.
+   Ranks by fewest missing lines first, then fewest equipped lines. Same DP shape as
+   the main solver (state = per-passive counts clamped to their goal), but each state
+   keeps its top-K distinct suffixes instead of just the single best one. */
+
+function kbestAlternatives(goals, active, cands) {
+  const K = 10;
+  const STATE_CAP = 150000;
+  const memo = new Map();
+  let states = 0;
+  let overflow = false;
+
+  function dfs(i, counts) {
+    if (overflow) return [];
+    const key = i + '|' + counts.join(',');
+    if (memo.has(key)) return memo.get(key);
+    if (++states > STATE_CAP) { overflow = true; return []; }
+    let entries;
+    if (i === SLOTS.length) {
+      entries = [{ R: 0, L: 0, picks: [] }];
+    } else {
+      const list = [];
+      let sub = dfs(i + 1, counts); // leave this slot empty
+      for (let j = 0; j < sub.length; j++) {
+        list.push({ R: sub[j].R, L: sub[j].L, picks: [null].concat(sub[j].picks) });
+      }
+      const arr = cands[i];
+      for (let idx = 0; idx < arr.length; idx++) {
+        const it = arr[idx];
+        const nc = counts.slice();
+        let inc = 0;
+        for (let m = 0; m < it.lines.length; m++) {
+          const l = it.lines[m];
+          const before = nc[l];
+          nc[l] = Math.min(nc[l] + 1, goals[l]);
+          inc += nc[l] - before;
+        }
+        sub = dfs(i + 1, nc);
+        for (let j = 0; j < sub.length; j++) {
+          list.push({ R: inc + sub[j].R, L: it.lines.length + sub[j].L, picks: [it].concat(sub[j].picks) });
+        }
+      }
+      list.sort(function (a, b) { return (b.R - a.R) || (a.L - b.L); });
+      const seen = new Set();
+      entries = [];
+      for (let c = 0; c < list.length && entries.length < K; c++) {
+        const sig = list[c].picks.map(function (p, si) {
+          return p ? si + ':' + p.lines.slice().sort(function (x, y) { return x - y; }).join('+') : '-';
+        }).join('|');
+        if (seen.has(sig)) continue;
+        seen.add(sig);
+        entries.push(list[c]);
+      }
+    }
+    memo.set(key, entries);
+    return entries;
+  }
+
+  const top = dfs(0, PASSIVES.map(function () { return 0; }));
+  if (overflow || !top.length) return null;
+  return top.map(function (e) {
+    const achieved = PASSIVES.map(function () { return 0; });
+    let lines = 0;
+    e.picks.forEach(function (it) {
+      if (it) { lines += it.lines.length; it.lines.forEach(function (l) { achieved[l]++; }); }
+    });
+    const missing = active.filter(function (a) { return achieved[a.p] < a.t; })
+      .map(function (a) { return { p: a.p, need: a.t - achieved[a.p] }; });
+    const freeSlots = [];
+    e.picks.forEach(function (it, i) { if (!it) freeSlots.push(SLOTS[i]); });
+    return {
+      picks: e.picks, lines: lines,
+      deficit: missing.reduce(function (s, m) { return s + m.need; }, 0),
+      missing: missing, freeSlots: freeSlots
+    };
+  });
+}
+
+/* ----- solver: pick at most one item per slot, meet every goal, minimize equipped lines ----- */
+
+function solve() {
+  const goals = state.goal.map(function (v) { return Math.max(0, Math.floor(v) || 0); });
+  const active = [];
+  for (let p = 0; p < PASSIVES.length; p++) if (goals[p] > 0) active.push({ p: p, t: goals[p] });
+  if (!active.length) return { status: 'no-goal' };
+
+  const cands = SLOTS.map(function (slot) {
+    return state.items.filter(function (it) { return it.slot === slot; });
+  });
+
+  // Max achievable per passive (equip the best item for that passive in every slot).
+  const maxPoss = PASSIVES.map(function (_, p) {
+    return cands.reduce(function (sum, arr) {
+      let best = 0;
+      arr.forEach(function (it) {
+        const c = it.lines.filter(function (l) { return l === p; }).length;
+        if (c > best) best = c;
+      });
+      return sum + best;
+    }, 0);
+  });
+  const missing = active.filter(function (a) { return maxPoss[a.p] < a.t; });
+  if (missing.length) {
+    return { status: 'impossible', maxPoss: maxPoss, missing: missing, alts: kbestAlternatives(goals, active, cands) };
+  }
+
+  // DP over slots; state = per-passive counts clamped to their goal (extra never helps).
+  const memo = new Map();
+  const choice = new Map();
+  let overflow = false;
+  function dfs(i, counts) {
+    if (overflow) return Infinity;
+    if (i === SLOTS.length) {
+      for (let k = 0; k < active.length; k++) {
+        if (counts[active[k].p] < active[k].t) return Infinity;
+      }
+      return 0;
+    }
+    const key = i + '|' + counts.join(',');
+    if (memo.has(key)) return memo.get(key);
+    if (memo.size > MEMO_LIMIT) { overflow = true; return Infinity; }
+    let best = Infinity;
+    let pick = -2;
+    let v = dfs(i + 1, counts); // leave this slot empty
+    if (v < best) { best = v; pick = -1; }
+    const arr = cands[i];
+    for (let idx = 0; idx < arr.length; idx++) {
+      const it = arr[idx];
+      const nc = counts.slice();
+      for (let m = 0; m < it.lines.length; m++) {
+        const l = it.lines[m];
+        nc[l] = Math.min(nc[l] + 1, goals[l]);
+      }
+      const v2 = it.lines.length + dfs(i + 1, nc);
+      if (v2 < best) { best = v2; pick = idx; }
+    }
+    memo.set(key, best);
+    choice.set(key, pick);
+    return best;
+  }
+
+  const best = dfs(0, PASSIVES.map(function () { return 0; }));
+  if (overflow) return { status: 'too-big' };
+  if (!isFinite(best)) {
+    return { status: 'joint-impossible', maxPoss: maxPoss, active: active, goals: goals, alts: kbestAlternatives(goals, active, cands) };
+  }
+
+  const picks = new Array(SLOTS.length).fill(null);
+  let counts = PASSIVES.map(function () { return 0; });
+  for (let i = 0; i < SLOTS.length; i++) {
+    const key = i + '|' + counts.join(',');
+    const c = choice.get(key);
+    if (typeof c === 'number' && c >= 0) {
+      const it = cands[i][c];
+      picks[i] = it;
+      it.lines.forEach(function (l) { counts[l] = Math.min(counts[l] + 1, goals[l]); });
+    }
+  }
+  const achieved = PASSIVES.map(function () { return 0; });
+  picks.forEach(function (it) {
+    if (it) it.lines.forEach(function (l) { achieved[l]++; });
+  });
+  let extra = 0;
+  active.forEach(function (a) { extra += Math.max(0, achieved[a.p] - a.t); });
+  PASSIVES.forEach(function (_, p) { if (goals[p] === 0) extra += achieved[p]; });
+  return {
+    status: 'ok', picks: picks, achieved: achieved, lines: best, extra: extra,
+    active: active, goals: goals, slotCounts: cands.map(function (a) { return a.length; })
+  };
+}
+
+/* ----- results ----- */
+
+function altSectionHTML(res) {
+  let html = '<div class="subhead">Closest setups</div>'
+    + '<p class="empty">The setups that come closest to your goal, and what lines would complete each:</p>';
+  if (!res.alts) {
+    return html + '<p class="empty">Too many combinations to rank alternative setups.</p>';
+  }
+  return html + res.alts.map(function (a, rank) {
+    const picksHTML = a.picks.map(function (it, i) {
+      const badge = it ? slotBadge(SLOTS[i]) : '<span class="slot-badge dim-badge">' + esc(SLOTS[i]) + '</span>';
+      const chips = it
+        ? it.lines.map(function (l) { return '<span class="chip">' + esc(PASSIVES[l]) + ' +1</span>'; }).join('')
+        : '<span class="chip dim">empty</span>';
+      return '<span class="alt-pick">' + badge + chips + '</span>';
+    }).join('');
+    const needs = a.missing.map(function (m) { return esc(PASSIVES[m.p]) + ' \u00d7' + m.need; }).join(', ');
+    const noFree = a.freeSlots.length ? '' : ' &middot; no free slot left &mdash; the missing lines would need a combined item or a swap';
+    return '<div class="alt">'
+      + '<div class="alt-head"><span class="alt-rank">#' + (rank + 1) + '</span>'
+      + '<span class="alt-short">' + a.deficit + ' line' + (a.deficit === 1 ? '' : 's') + ' short</span>'
+      + '<span class="alt-lines">' + a.lines + ' line' + (a.lines === 1 ? '' : 's') + ' equipped</span></div>'
+      + '<div class="alt-picks">' + picksHTML + '</div>'
+      + '<div class="alt-needs">Needs: <b>' + needs + '</b>' + noFree + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function renderResults(res) {
+  if (!res) {
+    resultsEl.innerHTML = '<p class="empty">Set your goal above and click &ldquo;Find best setup&rdquo;.</p>';
+    return;
+  }
+  if (res.status === 'no-goal') {
+    resultsEl.innerHTML = '<p class="empty">Set a goal of 1 or more for at least one passive first.</p>';
+    return;
+  }
+  if (res.status === 'too-big') {
+    resultsEl.innerHTML = '<p class="empty">Too many combinations to search &mdash; try lowering the goal numbers.</p>';
+    return;
+  }
+  if (res.status === 'impossible') {
+    resultsEl.innerHTML = '<p class="warn-block">This goal is not possible with your current items.</p>'
+      + '<ul class="totals">' + res.missing.map(function (m) {
+          return '<li><span class="t-name">' + esc(PASSIVES[m.p]) + '</span>'
+            + '<span class="t-val neg">goal ' + m.t + ', max ' + res.maxPoss[m.p] + '</span></li>';
+        }).join('') + '</ul>'
+      + '<p class="empty">Add more items with those lines, or lower the goal.</p>'
+      + altSectionHTML(res);
+    return;
+  }
+  if (res.status === 'joint-impossible') {
+    resultsEl.innerHTML = '<p class="warn-block">Each goal is possible on its own, but not all together &mdash; each slot can only equip one item. Try lowering a goal or adding items that combine lines.</p>'
+      + '<ul class="totals">' + res.active.map(function (a) {
+          return '<li><span class="t-name">' + esc(PASSIVES[a.p]) + '</span>'
+            + '<span class="t-val amber">goal ' + a.t + ', max ' + res.maxPoss[a.p] + '</span></li>';
+        }).join('') + '</ul>'
+      + altSectionHTML(res);
+    return;
+  }
+
+  const usedCount = res.picks.filter(Boolean).length;
+  const picksHTML = SLOTS.map(function (slot, i) {
+    const it = res.picks[i];
+    if (!it) {
+      const note = res.slotCounts[i] ? 'empty &mdash; not needed for your goal' : 'empty &mdash; no ' + slot.toLowerCase() + ' in inventory';
+      return '<div class="pick empty-pick">' + slotBadge(slot) + '<span class="muted">' + note + '</span></div>';
+    }
+    return '<div class="pick">' + slotBadge(slot)
+      + '<div class="chips">' + it.lines.map(function (l) {
+          return '<span class="chip">' + esc(PASSIVES[l]) + ' +1</span>';
+        }).join('') + '</div></div>';
+  }).join('');
+
+  const goalRows = res.active.map(function (a) {
+    const got = res.achieved[a.p];
+    const over = got - a.t;
+    const val = over > 0 ? got + ' / ' + a.t + ' (+' + over + ' extra)' : got + ' / ' + a.t + ' \u2713';
+    return '<li><span class="t-name">' + esc(PASSIVES[a.p]) + '</span>'
+      + '<span class="t-val ' + (over > 0 ? 'amber' : 'pos') + '">' + val + '</span></li>';
+  });
+  const bonusRows = [];
+  PASSIVES.forEach(function (p, i) {
+    if (res.goals[i] === 0 && res.achieved[i] > 0) {
+      bonusRows.push('<li><span class="t-name">' + esc(p) + '</span><span class="t-val pos">+' + res.achieved[i] + ' bonus</span></li>');
+    }
+  });
+
+  resultsEl.innerHTML = '<p class="result-summary">Goal met &mdash; <b>' + usedCount + ' of 6</b> slots, '
+    + res.lines + ' passive line' + (res.lines === 1 ? '' : 's') + ', '
+    + (res.extra ? res.extra + ' extra line' + (res.extra > 1 ? 's' : '') : '<b>no extra lines</b>') + '.</p>'
+    + picksHTML
+    + '<div class="subhead">Goal check</div>'
+    + '<ul class="totals">' + goalRows.join('') + bonusRows.join('') + '</ul>';
+}
+
+document.getElementById('solve-btn').addEventListener('click', function () {
+  const res = solve();
+  solveSnapshot = stateSig();
+  staleEl.hidden = true;
+  renderResults(res);
+});
+
+/* ----- init ----- */
+
+document.getElementById('entry-slot').innerHTML =
+  '<option value="">&mdash; select slot &mdash;</option>'
+  + SLOTS.map(function (s) { return '<option value="' + esc(s) + '">' + esc(s) + '</option>'; }).join('');
+renderEntry();
+renderInventory();
+renderGoal();
+renderResults(null);
+</script>
+</body>
+</html>
