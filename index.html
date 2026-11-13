@@ -69,8 +69,28 @@
   .remove:disabled { opacity: 0.3; cursor: not-allowed; }
   .remove:disabled:hover { color: var(--muted); border-color: transparent; background: transparent; }
   #entry-slot { margin-bottom: 12px; }
-  #entry-lines { margin-bottom: 12px; }
-  .lines-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  #entry-lines { margin-bottom: 2px; }
+  .toggles-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .toggle-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; cursor: pointer;
+  }
+  .toggle-row:hover { border-color: var(--accent); }
+  .toggle-row .pname { font-size: 13.5px; }
+  .switch { position: relative; flex: 0 0 38px; width: 38px; height: 22px; }
+  .switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .slider {
+    position: absolute; inset: 0; background: var(--border); border-radius: 999px;
+    transition: background 0.15s; pointer-events: none;
+  }
+  .slider::before {
+    content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+    border-radius: 50%; background: var(--text); transition: transform 0.15s, background 0.15s;
+  }
+  .switch input:checked + .slider { background: var(--accent); }
+  .switch input:checked + .slider::before { transform: translateX(16px); background: #0d1117; }
+  .switch input:focus-visible + .slider { outline: 2px solid rgba(124, 156, 255, 0.5); }
   .form-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .chip {
@@ -158,7 +178,7 @@
     .cols { grid-template-columns: 1fr; }
   }
   @media (max-width: 520px) {
-    .lines-grid { grid-template-columns: 1fr; }
+    .toggles-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -186,11 +206,12 @@
     <div class="col">
       <section class="panel" aria-label="Add item">
         <h2>Add an item</h2>
-        <p class="hint">Pick the equip slot, choose up to 3 passive lines (each gives +1; use none for unused lines), then add it to your inventory.</p>
+        <p class="hint">Pick the equip slot, toggle up to 3 passive lines (each gives +1), then add it to your inventory.</p>
         <select id="entry-slot" aria-label="Equip slot"></select>
-        <div id="entry-lines" class="lines-grid"></div>
+        <div id="entry-lines" class="toggles-grid"></div>
         <div class="form-actions">
-          <button type="button" class="btn btn-primary" id="add-item-btn">Add item</button>
+          <span class="count" id="toggle-count">0 / 3 lines selected</span>
+          <button type="button" class="btn btn-primary" id="add-item-btn" disabled>Add item</button>
         </div>
       </section>
     </div>
@@ -214,8 +235,8 @@
 const SLOTS = ['Hat', 'Top', 'Bottom', 'Shoes', 'Gloves', 'Cape'];
 const PASSIVES = [
   'Warrior Skill', 'Bowman Skill', 'Thief Skill', 'Mage Skill', 'Pirate Skill',
-  'White Hole', 'Leap', 'Ignore DEF', 'ATK/MATK', 'Crit DMG', 'Damage', 'Boss Damage',
-  'Registry'
+  'White Hole', 'Leap', 'ATK/MATK', 'Crit DMG', 'Registry',
+  'Boss Damage', 'Damage', 'Ignore DEF'  // low-priority lines last
 ];
 const SLOT_COLORS = {
   Hat: '#7c9cff', Top: '#4ade80', Bottom: '#fbbf24',
@@ -223,7 +244,11 @@ const SLOT_COLORS = {
 };
 /* ======================================================== */
 
-const STORAGE_KEY = 'gear-passive-planner-v1';
+const STORAGE_KEY = 'gear-passive-planner-v2';
+/* v1 saved lines/goals as indices into the old PASSIVES order (Ignore DEF, Damage,
+   Boss Damage sat in the middle). Remap old indices to the new order. */
+const V1_STORAGE_KEY = 'gear-passive-planner-v1';
+const V1_TO_NEW = [0, 1, 2, 3, 4, 5, 6, 12, 7, 8, 11, 10, 9];
 const MEMO_LIMIT = 800000;
 
 const entryLinesEl = document.getElementById('entry-lines');
@@ -268,6 +293,28 @@ function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return normalizeState(JSON.parse(raw));
+    const v1raw = localStorage.getItem(V1_STORAGE_KEY);
+    if (v1raw) {
+      const s = JSON.parse(v1raw);
+      if (s && Array.isArray(s.items)) {
+        s.items = s.items.map(function (it) {
+          return Object.assign({}, it, {
+            lines: (Array.isArray(it.lines) ? it.lines : [])
+              .map(function (l) { return V1_TO_NEW[l]; })
+              .filter(function (l) { return Number.isInteger(l); })
+          });
+        });
+      }
+      if (s && Array.isArray(s.goal)) {
+        const g = PASSIVES.map(function () { return 0; });
+        s.goal.forEach(function (v, i) {
+          if (Number.isInteger(V1_TO_NEW[i])) g[V1_TO_NEW[i]] = v;
+        });
+        s.goal = g;
+      }
+      localStorage.removeItem(V1_STORAGE_KEY);
+      return normalizeState(s);
+    }
   } catch (e) { /* corrupted or unavailable storage — fall through to defaults */ }
   return emptyState();
 }
@@ -292,38 +339,55 @@ function toast(msg) {
   toastTimer = setTimeout(function () { el.classList.remove('show'); }, 1800);
 }
 
-/* ----- entry form ----- */
+/* ----- entry form: slot + up to 3 passive toggle switches ----- */
 
-let entryLines = ['', '', ''];
+const MAX_LINES = 3;
+let pickedLines = [];
 
 function slotBadge(slot) {
   const c = SLOT_COLORS[slot] || '#8b94a7';
   return '<span class="slot-badge" style="color:' + c + ';border-color:' + c + '66;background:' + c + '1f">' + esc(slot) + '</span>';
 }
-function lineSelectHTML(val, i) {
-  return '<select class="line-select" data-line="' + i + '" aria-label="Passive line ' + (i + 1) + '">'
-    + '<option value=""' + (val === '' ? ' selected' : '') + '>&mdash; none &mdash;</option>'
-    + PASSIVES.map(function (p, pi) {
-        return '<option value="' + pi + '"' + (pi === val ? ' selected' : '') + '>' + esc(p) + ' +1</option>';
-      }).join('')
-    + '</select>';
+function toggleRowHTML(p, pi) {
+  return '<label class="toggle-row"><span class="switch">'
+    + '<input type="checkbox" data-line="' + pi + '"'
+    + (pickedLines.indexOf(pi) >= 0 ? ' checked' : '')
+    + ' aria-label="' + esc(p) + ' +1">'
+    + '<span class="slider"></span></span>'
+    + '<span class="pname">' + esc(p) + ' +1</span></label>';
 }
 function renderEntry() {
-  entryLinesEl.innerHTML = entryLines.map(lineSelectHTML).join('');
+  entryLinesEl.innerHTML = PASSIVES.map(toggleRowHTML).join('');
+  updateToggleMeta();
+}
+function updateToggleMeta() {
+  const n = pickedLines.length;
+  document.getElementById('toggle-count').textContent = n + ' / ' + MAX_LINES + ' lines selected';
+  document.getElementById('add-item-btn').disabled = n === 0;
 }
 entryLinesEl.addEventListener('change', function (e) {
-  if (e.target.classList.contains('line-select')) {
-    entryLines[+e.target.dataset.line] = e.target.value === '' ? '' : +e.target.value;
+  const input = e.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  const pi = +input.dataset.line;
+  if (input.checked) {
+    if (pickedLines.length >= MAX_LINES) {
+      input.checked = false;
+      toast('Max ' + MAX_LINES + ' passive lines per item');
+      return;
+    }
+    pickedLines.push(pi);
+  } else {
+    pickedLines = pickedLines.filter(function (x) { return x !== pi; });
   }
+  updateToggleMeta();
 });
 document.getElementById('add-item-btn').addEventListener('click', function () {
   const slot = document.getElementById('entry-slot').value;
   if (!slot) { toast('Pick an equip slot first'); return; }
-  const lines = entryLines.filter(function (v) { return v !== ''; }).map(Number);
-  if (!lines.length) { toast('Pick at least one passive line'); return; }
-  state.items.push({ id: newId(), slot: slot, lines: lines });
+  if (!pickedLines.length) { toast('Toggle at least one passive line'); return; }
+  state.items.push({ id: newId(), slot: slot, lines: pickedLines.slice() });
   document.getElementById('entry-slot').value = '';
-  entryLines = ['', '', ''];
+  pickedLines = [];
   renderEntry();
   renderInventory();
   saveState();
